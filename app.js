@@ -113,10 +113,4 @@ dialog.matches('FindRecipe', [  function(session, args){
         session.send('What do you want to eat?');
         session.endDialog();
     }
-])bot.dialog('/3more',[
-    function(session, args){
-        //console.log(session.userData.allRecipes);
-        console.log('Je suis ici');
-
-    }
-])
+]);
