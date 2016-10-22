@@ -23,50 +23,65 @@ var dialog = new builder.IntentDialog({ recognizers: [recognizer] });
 
 bot.dialog('/', dialog);
 // Find a match with Luis
-dialog.matches('FindRecipe', [
+dialog.matches('FindRecipe', [  function(session, args){
+    //console.log(session.userData);
+    var ingredients = builder.EntityRecognizer.findAllEntities(args.entities, 'Ingredients');
+    var results = ingredients.map(cur => cur.entity);
+    var stringResult = results.toString();
+    session.userData.askedIngredients = stringResult;
+    var tableOfRecipes = [];
+    var first3recipes = [];
 
-    function(session, args){
-        //console.log(session.userData);
-        var ingredients = builder.EntityRecognizer.findAllEntities(args.entities, 'Ingredients');
-        var results = ingredients.map(cur => cur.entity);
-        var stringResult = results.toString();
-        session.userData.askedIngredients = stringResult;
-        var tableOfRecipes = [];
-        var first3recipes = [];
-
-        session.send('You asked for %s', stringResult);
-
-        request
-            .get("https://api.edamam.com/search?q="+stringResult+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
-            .end(function(err, res) {
-                if (err || !res.ok) {
-                    console.log(err);
+    session.send('You asked for %s', stringResult);              request
+        .get("https://api.edamam.com/search?q="+stringResult+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
+        .end(function(err, res) {
+            if (err || !res.ok) {
+                console.log(err);
+            }
+            else {
+                for(var i =0; i < res.body.hits.length;i++){
+                    tableOfRecipes[i] = res.body.hits[i].recipe.label;
                 }
-                else {
-                    for(var i =0; i < res.body.hits.length;i++){
-                        tableOfRecipes[i] = res.body.hits[i].recipe.label;
-                    }
-                    for(var j =0; j < 3;j++){
-                        first3recipes[j] = tableOfRecipes[j];
-                    }
-                    first3recipes[3] = "None of these?";
-                    //console.log(first3recipes);
+                for(var j =0; j < 3;j++){
+                    first3recipes[j] = tableOfRecipes[j];
                 }
-                builder.Prompts.choice(session, "Here is 3 recipes", first3recipes);
-                session.userData.allRecipes = tableOfRecipes;
-                //console.log(session.userData.allRecipes);
-                session.save();
-            })
-    },
-    function(session, results, args){
+                first3recipes[3] = "None of these?";
+                //console.log(first3recipes);
+            }
+            builder.Prompts.choice(session, "Here is 3 recipes", first3recipes);
+            session.userData.allRecipes = tableOfRecipes;
+            session.save();
+        })
+},
+    function(session, results, next){
         var index = 3;
         var tempRecipes = session.userData.allRecipes.slice(index, index+3);
         session.userData.chosenRecipe = results.response.entity;
         if(session.userData.chosenRecipe == "None of these?"){
             tempRecipes[index] = "None of these?";
-            console.log(tempRecipes);
             builder.Prompts.choice(session, "All right then here is 3 more!", tempRecipes);
-        }else{
+        }
+        else{
+            next();
+        }
+    },
+    function(session, results, next){
+        var index = 6;
+        var tempRecipes = session.userData.allRecipes.slice(index, index+4);
+        //session.userData.chosenRecipe = results.response.entity;
+        if(session.userData.chosenRecipe == "None of these?"){
+            tempRecipes[index-3] = "None of these?";
+            builder.Prompts.choice(session, "All right then here is 3 more!", tempRecipes);
+        } else{
+            next();
+        }
+    },
+    function(session, results, args, next){
+        //var tempRecipes = session.userData.allRecipes.slice(index, index+4);
+        //session.userData.chosenRecipe = results.response.entity;
+        if(session.userData.chosenRecipe == "None of these?"){
+            session.send("I am so sorry but I don't have any more recipes with those ingredients! Would like something else?")
+        } else{
             var ingredients;
             request
                 .get("https://api.edamam.com/search?q="+session.userData.chosenRecipe+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
@@ -80,13 +95,8 @@ dialog.matches('FindRecipe', [
                     builder.Prompts.choice(session, "Here are the ingredients", ingredients);
                 })
         }
-    },
-    function(session, results, args){
-
     }
-]);
-
-dialog.onDefault([
+]);dialog.onDefault([
     function(session, args, next){
         if(!session.userData.state){
             session.beginDialog('/introduction');
@@ -94,9 +104,7 @@ dialog.onDefault([
             next();
         }
     }
-]);
-
-bot.dialog('/introduction',[
+]);bot.dialog('/introduction',[
     function(session){
         builder.Prompts.text(session, 'Hi! How are you?');
     },
@@ -105,9 +113,7 @@ bot.dialog('/introduction',[
         session.send('What do you want to eat?');
         session.endDialog();
     }
-])
-
-bot.dialog('/3more',[
+])bot.dialog('/3more',[
     function(session, args){
         //console.log(session.userData.allRecipes);
         console.log('Je suis ici');
