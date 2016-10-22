@@ -23,119 +23,124 @@ var dialog = new builder.IntentDialog({ recognizers: [recognizer] });
 
 bot.dialog('/', dialog);
 // Find a match with Luis
-dialog.matches('FindRecipe', [
+try{
+    dialog.matches('FindRecipe', [
 
-    function(session, args){
-        //console.log(session.userData);
-        var ingredients = builder.EntityRecognizer.findAllEntities(args.entities, 'Ingredients');
-        var results = ingredients.map(cur => cur.entity);
-        var stringResult = results.toString();
-        session.userData.askedIngredients = stringResult;
-        var tableOfRecipes = [];
-        var first3recipes = [];
+        function(session, args){
+            //console.log(session.userData);
+            var ingredients = builder.EntityRecognizer.findAllEntities(args.entities, 'Ingredients');
+            var results = ingredients.map(cur => cur.entity);
+            var stringResult = results.toString();
+            session.userData.askedIngredients = stringResult;
+            var tableOfRecipes = [];
+            var first3recipes = [];
 
-        session.send('You asked for %s', stringResult);
+            session.send('You asked for %s', stringResult);
 
-        request
-            .get("https://api.edamam.com/search?q="+stringResult+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
-            .end(function(err, res) {
-                if (err || !res.ok) {
-                    console.log(err);
-                }
-                else {
-                    for(var i =0; i < res.body.hits.length;i++){
-                        tableOfRecipes[i] = res.body.hits[i].recipe.label;
-                    }
-                    for(var j =0; j < 3;j++){
-                        first3recipes[j] = tableOfRecipes[j];
-                    }
-                    first3recipes[3] = "None of these?";
-                }
-                builder.Prompts.choice(session, "Here is 3 recipes", first3recipes);
-                session.userData.allRecipes = tableOfRecipes;
-                session.save();
-            })
-    },
-    function(session, results, next){
-        var index = 3;
-        var tempRecipes = session.userData.allRecipes.slice(index, index+3);
-        session.userData.chosenRecipe = results.response.entity;
-        if(session.userData.chosenRecipe == "None of these?"){
-            tempRecipes[index] = "None of these?";
-            builder.Prompts.choice(session, "All right then here is 3 more!", tempRecipes);
-        }
-        else{
-            var ingredients = [];
-            console.log('je suis ici' + session.userData.chosenRecipe);
             request
-                .get("https://api.edamam.com/search?q="+session.userData.chosenRecipe+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
+                .get("https://api.edamam.com/search?q="+stringResult+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
                 .end(function(err, res) {
                     if (err || !res.ok) {
                         console.log(err);
                     }
                     else {
-                        for(var i = 0;i<res.body.hits[0].recipe.ingredientLines.length;i++){
-                            ingredients[i] = res.body.hits[0].recipe.ingredientLines[i];
+                        for(var i =0; i < res.body.hits.length;i++){
+                            tableOfRecipes[i] = res.body.hits[i].recipe.label;
                         }
+                        for(var j =0; j < 3;j++){
+                            first3recipes[j] = tableOfRecipes[j];
+                        }
+                        first3recipes[3] = "None of these?";
                     }
-                    session.send('Here are the ingredients %s', ingredients)
-                    session.endDialog();
+                    builder.Prompts.choice(session, "Here is 3 recipes", first3recipes);
+                    session.userData.allRecipes = tableOfRecipes;
+                    session.save();
                 })
-        }
-    },
-    function(session, results, next){
-        var index = 6;
-        var tempRecipes = session.userData.allRecipes.slice(index, index+4);
-        if(results.response && results.response.entity !== "None of these?"){
+        },
+        function(session, results, next){
+            var index = 3;
+            var tempRecipes = session.userData.allRecipes.slice(index, index+3);
             session.userData.chosenRecipe = results.response.entity;
-        }
-        if(session.userData.chosenRecipe == "None of these?"){
-            tempRecipes[index-3] = "None of these?";
-            builder.Prompts.choice(session, "All right then here are the last four", tempRecipes);
-        } else{
-            var ingredients = [];
-            request
-                .get("https://api.edamam.com/search?q="+session.userData.chosenRecipe+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
-                .end(function(err, res) {
-                    if (err || !res.ok) {
-                        console.log(err);
-                    }
-                    else {
-                        for(var i = 0;i<res.body.hits[0].recipe.ingredientLines.length;i++){
-                            ingredients[i] = res.body.hits[0].recipe.ingredientLines[i];
+            if(session.userData.chosenRecipe == "None of these?"){
+                tempRecipes[index] = "None of these?";
+                builder.Prompts.choice(session, "All right then here is 3 more!", tempRecipes);
+            }
+            else{
+                var ingredients = [];
+                console.log('je suis ici' + session.userData.chosenRecipe);
+                request
+                    .get("https://api.edamam.com/search?q="+session.userData.chosenRecipe+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
+                    .end(function(err, res) {
+                        if (err || !res.ok) {
+                            console.log(err);
                         }
-                    }
-                    session.send('Here are the ingredients %s', ingredients)
-                    session.endDialog();
-                })
-        }
-    },
-    function(session, results){
-        if(results.response && results.response.entity !== "None of these?"){
-            session.userData.chosenRecipe = results.response.entity;
-        }
-        if(session.userData.chosenRecipe == "None of these?"){
-            session.send("I am so sorry but I don't have any more recipes with those ingredients! Would like something else?");
-            session.endDialog();
-        } else{
-            var ingredients = [];
-            request
-                .get("https://api.edamam.com/search?q="+session.userData.chosenRecipe+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
-                .end(function(err, res) {
-                    if (err || !res.ok) {
-                        console.log(err);
-                    }
-                    else {
-                        for(var i = 0;i<res.body.hits[0].recipe.ingredientLines.length;i++){
-                            ingredients[i] = res.body.hits[0].recipe.ingredientLines[i];
+                        else {
+                            for(var i = 0;i<res.body.hits[0].recipe.ingredientLines.length;i++){
+                                ingredients[i] = res.body.hits[0].recipe.ingredientLines[i];
+                            }
                         }
-                    }
-                    session.send('Here are the ingredients %s', ingredients)
-                    session.endDialog();
-                })
+                        session.send('Here are the ingredients %s', ingredients)
+                        session.endDialog();
+                    })
+            }
+        },
+        function(session, results, next){
+            var index = 6;
+            var tempRecipes = session.userData.allRecipes.slice(index, index+4);
+            if(results.response && results.response.entity !== "None of these?"){
+                session.userData.chosenRecipe = results.response.entity;
+            }
+            if(session.userData.chosenRecipe == "None of these?"){
+                tempRecipes[index-3] = "None of these?";
+                builder.Prompts.choice(session, "All right then here are the last four", tempRecipes);
+            } else{
+                var ingredients = [];
+                request
+                    .get("https://api.edamam.com/search?q="+session.userData.chosenRecipe+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
+                    .end(function(err, res) {
+                        if (err || !res.ok) {
+                            console.log(err);
+                        }
+                        else {
+                            for(var i = 0;i<res.body.hits[0].recipe.ingredientLines.length;i++){
+                                ingredients[i] = res.body.hits[0].recipe.ingredientLines[i];
+                            }
+                        }
+                        session.send('Here are the ingredients %s', ingredients)
+                        session.endDialog();
+                    })
+            }
+        },
+        function(session, results){
+            if(results.response && results.response.entity !== "None of these?"){
+                session.userData.chosenRecipe = results.response.entity;
+            }
+            if(session.userData.chosenRecipe == "None of these?"){
+                session.send("I am so sorry but I don't have any more recipes with those ingredients! Would like something else?");
+                session.endDialog();
+            } else{
+                var ingredients = [];
+                request
+                    .get("https://api.edamam.com/search?q="+session.userData.chosenRecipe+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
+                    .end(function(err, res) {
+                        if (err || !res.ok) {
+                            console.log(err);
+                        }
+                        else {
+                            for(var i = 0;i<res.body.hits[0].recipe.ingredientLines.length;i++){
+                                ingredients[i] = res.body.hits[0].recipe.ingredientLines[i];
+                            }
+                        }
+                        session.send('Here are the ingredients %s', ingredients)
+                        session.endDialog();
+                    })
+            }
         }
-    }
-]);
+    ]);
+}
+catch(err){
+    console.log(err);
+}
 
 dialog.onDefault([
     function(session, args, next){
