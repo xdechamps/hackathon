@@ -1,7 +1,6 @@
 var builder = require('botbuilder');
 var restify = require('restify');
-var Store = require('./store');
-
+var request = require ('superagent');
 
 // Setup Restify Server
 var server = restify.createServer();
@@ -17,102 +16,101 @@ var connector = new builder.ChatConnector({
 var bot = new builder.UniversalBot(connector);
 server.post('/api/messages', connector.listen());
 
-// You can provide your own model by specifing the 'LUIS_MODEL_URL' environment variable
-// This Url can be obtained by uploading or creating your model from the LUIS portal: https://www.luis.ai/
-const LuisModelUrl = process.env.LUIS_MODEL_URL ||
-    'https://api.projectoxford.ai/luis/v1/application?id=162bf6ee-379b-4ce4-a519-5f5af90086b5&subscription-key=11be6373fca44ded80fbe2afa8597c18';
+var bot = new builder.UniversalBot(connector);
+var model = process.env.model || 'https://api.projectoxford.ai/luis/v1/application?id=19ea5fce-54cc-4cd5-aa58-bd7109dfa633&subscription-key=7c18d4f68f924a21b16e21a0fcb68da7';
+var recognizer = new builder.LuisRecognizer(model);
+var dialog = new builder.IntentDialog({ recognizers: [recognizer] });
 
-// Main dialog with LUIS
-var recognizer = new builder.LuisRecognizer(LuisModelUrl);
-var intents = new builder.IntentDialog({ recognizers: [recognizer] })
-    .matches('SearchHotels', [
-        function (session, args, next) {
-            session.send('Welcome to the Hotels finder! we are analyzing your message: \'%s\'', session.message.text);
+bot.dialog('/', dialog);
+// Find a match with Luis
+dialog.matches('FindRecipe', [
 
-            // try extracting entities
-            var cityEntity = builder.EntityRecognizer.findEntity(args.entities, 'builtin.geography.city');
-            var airportEntity = builder.EntityRecognizer.findEntity(args.entities, 'AirportCode');
-            if (cityEntity) {
-                // city entity detected, continue to next step
-                session.dialogData.searchType = 'city';
-                next({ response: cityEntity.entity });
-            } else if (airportEntity) {
-                // airport entity detected, continue to next step
-                session.dialogData.searchType = 'airport';
-                next({ response: airportEntity.entity });
-            } else {
-                // no entities detected, ask user for a destination
-                builder.Prompts.text(session, 'Please enter your destination');
-            }
-        },
-        function (session, results) {
-            var destination = results.response;
+    function(session, args){
+        //console.log(session.userData);
+        var ingredients = builder.EntityRecognizer.findAllEntities(args.entities, 'Ingredients');
+        var results = ingredients.map(cur => cur.entity);
+        var stringResult = results.toString();
+        session.userData.askedIngredients = stringResult;
+        var tableOfRecipes = [];
+        var first3recipes = [];
 
-            var message = 'Looking for hotels';
-            if (session.dialogData.searchType === 'airport') {
-                message += ' near %s airport...';
-            } else {
-                message += ' in %s...';
-            }
+        session.send('You asked for %s', stringResult);
 
-            session.send(message, destination);
-
-            // Async search
-            Store
-                .searchHotels(destination)
-                .then((hotels) => {
-                    // args
-                    session.send('I found %d hotels:', hotels.length);
-
-                    var message = new builder.Message()
-                        .attachmentLayout(builder.AttachmentLayout.carousel)
-                        .attachments(hotels.map(hotelAsAttachment));
-
-                    session.send(message);
-
-                    // End
-                    session.endDialog();
-                });
+        request
+            .get("https://api.edamam.com/search?q="+stringResult+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
+            .end(function(err, res) {
+                if (err || !res.ok) {
+                    console.log(err);
+                }
+                else {
+                    for(var i =0; i < res.body.hits.length;i++){
+                        tableOfRecipes[i] = res.body.hits[i].recipe.label;
+                    }
+                    for(var j =0; j < 3;j++){
+                        first3recipes[j] = tableOfRecipes[j];
+                    }
+                    first3recipes[3] = "None of these?";
+                    //console.log(first3recipes);
+                }
+                builder.Prompts.choice(session, "Here is 3 recipes", first3recipes);
+                session.userData.allRecipes = tableOfRecipes;
+                //console.log(session.userData.allRecipes);
+                session.save();
+            })
+    },
+    function(session, results, args){
+        var index = 3;
+        var tempRecipes = session.userData.allRecipes.slice(index, index+3);
+        session.userData.chosenRecipe = results.response.entity;
+        if(session.userData.chosenRecipe == "None of these?"){
+            tempRecipes[index] = "None of these?";
+            console.log(tempRecipes);
+            builder.Prompts.choice(session, "All right then here is 3 more!", tempRecipes);
+        }else{
+            var ingredients;
+            request
+                .get("https://api.edamam.com/search?q="+session.userData.chosenRecipe+"&app_id=af13cdfd&app_key=0da1a28420e7d1c6d55fe527499289a5")
+                .end(function(err, res) {
+                    if (err || !res.ok) {
+                        console.log(err);
+                    }
+                    else {
+                        ingredients = res.body.hits[0].recipe.ingredientLines.toString()
+                    }
+                    builder.Prompts.choice(session, "Here are the ingredients", ingredients);
+                })
         }
-    ])
-    .matches('ShowHotelsReviews', (session, args) => {
-        // retrieve hotel name from matched entities
-        var hotelEntity = builder.EntityRecognizer.findEntity(args.entities, 'Hotel');
-        if (hotelEntity) {
-            session.send('Looking for reviews of \'%s\'...', hotelEntity.entity);
-            Store.searchHotelReviews(hotelEntity.entity)
-                .then((reviews) => {
-                    var message = new builder.Message()
-                        .attachmentLayout(builder.AttachmentLayout.carousel)
-                        .attachments(reviews.map(reviewAsAttachment));
-                    session.send(message)
-                });
+    },
+    function(session, results, args){
+
+    }
+]);
+
+dialog.onDefault([
+    function(session, args, next){
+        if(!session.userData.state){
+            session.beginDialog('/introduction');
+        } else {
+            next();
         }
-    })
-    .matches('Help', builder.DialogAction.send('Hi! Try asking me things like \'search hotels in Seattle\', \'search hotels near LAX airport\' or \'show me the reviews of The Bot Resort\''))
-    .onDefault((session) => {
-        session.send('Sorry, I did not understand \'%s\'. Type \'help\' if you need assistance.', session.message.text);
-    });
+    }
+]);
 
-bot.dialog('/', intents);
+bot.dialog('/introduction',[
+    function(session){
+        builder.Prompts.text(session, 'Hi! How are you?');
+    },
+    function (session, results) {
+        session.userData.state = results.response;
+        session.send('What do you want to eat?');
+        session.endDialog();
+    }
+])
 
-// Helpers
-function hotelAsAttachment(hotel) {
-    return new builder.HeroCard()
-        .title(hotel.name)
-        .subtitle('%d stars. %d reviews. From $%d per night.', hotel.rating, hotel.numberOfReviews, hotel.priceStarting)
-        .images([new builder.CardImage().url(hotel.image)])
-        .buttons([
-            new builder.CardAction()
-                .title('More details')
-                .type('openUrl')
-                .value('https://www.bing.com/search?q=hotels+in+' + encodeURIComponent(hotel.location))
-        ]);
-}
+bot.dialog('/3more',[
+    function(session, args){
+        //console.log(session.userData.allRecipes);
+        console.log('Je suis ici');
 
-function reviewAsAttachment(review) {
-    return new builder.ThumbnailCard()
-        .title(review.title)
-        .text(review.text)
-        .images([new builder.CardImage().url(review.image)])
-}
+    }
+])

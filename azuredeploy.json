@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "siteName": {
-      "defaultValue": "BotBuilder-Samples",
+      "defaultValue": "CookingAid - Hackathon",
       "type": "string"
     },
     "hostingPlanName": {
@@ -39,7 +39,7 @@
     },
     "Project": {
       "type": "string",
-      "defaultValue": "Node/intelligence-LUIS"
+      "defaultValue": ""
     },
     "WEBSITE_NODE_DEFAULT_VERSION": {
       "type": "string",
@@ -53,7 +53,7 @@
     },
     "LUIS_MODEL_URL": {
       "type": "string",
-      "defaultValue": "https://api.projectoxford.ai/luis/v1/application?id=162bf6ee-379b-4ce4-a519-5f5af90086b5&subscription-key=11be6373fca44ded80fbe2afa8597c18"
+      "defaultValue": "https://api.projectoxford.ai/luis/v1/application?id=19ea5fce-54cc-4cd5-aa58-bd7109dfa633&subscription-key=7c18d4f68f924a21b16e21a0fcb68da7"
     }
   },
   "resources": [
